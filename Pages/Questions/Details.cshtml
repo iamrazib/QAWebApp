@@ -1,0 +1,825 @@
+@page
+@model DetailsModel
+@using System.Text.Json
+@{
+    ViewData["Title"] = Model.Question?.Title ?? "Question Details";
+}
+
+@if (Model.Question == null)
+{
+    <div class="alert alert-danger">Question not found.</div>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card question-card mb-4">
+                <div class="card-body">
+                    <div class="row">
+                        <!-- Left: votes -->
+                        <div class="col-md-1 text-center vote-buttons">
+                            <button class="btn btn-link" onclick="vote(@Model.Question.Id, null, 1)">▲</button>
+                            <strong id="question-votes">@Model.Question.VoteCount</strong>
+                            <button class="btn btn-link" onclick="vote(@Model.Question.Id, null, -1)">▼</button>
+                        </div>
+
+                        <!-- Right: question content -->
+                        <div class="col-md-11">
+
+                            <div id="question-wrapper"
+                                 data-questionid="@Model.Question.Id"
+                                 data-userid="@Model.Question.UserId"
+                                 data-tags="@string.Join(",", Model.Question.Tags.Select(t => t.Name))">
+
+                                <!-- Title + edit button (same line) -->
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h2 class="mb-0" id="questionTitleText">@Model.Question.Title</h2>
+
+                                    <!-- hidden by default; JS shows only if owner -->
+                                    <button class="btn btn-sm btn-warning text-dark fw-semibold shadow-sm"
+                                            id="editQuestionBtn"
+                                            style="display:none;"
+                                            onclick="openEditQuestion()">
+                                        ✎ Edit
+                                    </button>
+                                </div>
+
+                                <!-- Body -->
+                                <p id="questionBodyText" style="white-space: pre-wrap;">@Model.Question.Body</p>
+
+                                <!-- Edit box (hidden initially) -->
+                                <div id="editQuestionBox" class="mt-3 mb-2" style="display:none;">
+                                    <div class="mb-2">
+                                        <label class="form-label fw-semibold">Title</label>
+                                        <input class="form-control" id="editQuestionTitle"
+                                               value="@Model.Question.Title" maxlength="200" />
+                                    </div>
+
+                                    <div class="mb-2">
+                                        <label class="form-label fw-semibold">Body</label>
+                                        <textarea class="form-control" id="editQuestionBody"
+                                              rows="6" maxlength="5000">@Model.Question.Body</textarea>
+                                    </div>
+
+                                    <div id="editQuestionError" class="alert alert-danger d-none"></div>
+
+                                    <button class="btn btn-success" onclick="saveQuestionEdit()">Save</button>
+                                    <button class="btn btn-secondary ms-2" onclick="cancelEditQuestion()">Cancel</button>
+                                </div>
+                            </div>
+
+                            <!-- Tags (same as your original) -->
+                            <div class="mb-3">
+                                @foreach (var tag in Model.Question.Tags)
+                                {
+                                    <a href="/Questions?tag=@tag.Name" class="tag text-decoration-none me-1">@tag.Name</a>
+                                }
+                            </div>
+
+                            <!-- Meta info -->
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    @if (Model.Question.UpdatedAt.HasValue)
+                                    {
+                                        <small class="text-muted">Edited @Model.Question.UpdatedAt.Value.ToString("MMM dd, yyyy")</small>
+                                    }
+                                </div>
+                                <div class="text-end">
+                                    <small class="text-muted">
+                                        Asked @Model.Question.CreatedAt.ToString("MMM dd, yyyy") by <strong>@Model.Question.User.Username</strong>
+                                    </small>
+                                </div>
+                            </div>
+
+                            <!-- Comments (same as your original) -->
+                            <div class="mt-3">
+                                <h6>Comments</h6>
+                                <div id="question-comments">
+                                    @* @foreach (var comment in Model.Question.Comments)
+                                    {
+                                        <div class="border-bottom py-2">
+                                            <small>@comment.Body - <strong>@comment.User.Username</strong> (@comment.CreatedAt.ToString("MMM dd"))</small>
+                                        </div>
+                                    } *@
+
+                                    @foreach (var comment in Model.Question.Comments)
+                                    {
+                                        <div class="border-bottom py-2 comment-wrapper"
+                                             data-commentid="@comment.Id"
+                                             data-userid="@comment.UserId">
+
+                                            <div class="d-flex justify-content-between align-items-start">
+                                                <small id="commentText-@comment.Id">
+                                                    @comment.Body - <strong>@comment.User.Username</strong> (@comment.CreatedAt.ToString("MMM dd"))
+                                                </small>
+
+                                                <button class="btn btn-sm btn-warning fw-semibold shadow-sm ms-2"
+                                                        id="editCommentBtn-@comment.Id"
+                                                        style="display:none;"
+                                                        onclick="openEditComment(@comment.Id)">
+                                                    ✎ Edit
+                                                </button>
+                                            </div>
+
+                                            <div id="editCommentBox-@comment.Id" class="mt-2" style="display:none;">
+                                                <input type="text"
+                                                       class="form-control form-control-sm"
+                                                       id="editCommentBody-@comment.Id"
+                                                       value="@comment.Body"
+                                                       maxlength="500" />
+
+                                                <div id="editCommentError-@comment.Id" class="alert alert-danger d-none mt-2"></div>
+
+                                                <button class="btn btn-success btn-sm" onclick="saveCommentEdit(@comment.Id)">Save</button>
+                                                <button class="btn btn-secondary btn-sm ms-2" onclick="cancelEditComment(@comment.Id)">Cancel</button>
+                                            </div>
+                                        </div>
+                                    }
+
+
+                                </div>
+
+                                <div class="mt-2" id="question-comment-form" style="display:none;">
+                                    <input type="text" class="form-control form-control-sm" id="question-comment-text"
+                                           placeholder="Add a comment..." maxlength="500">
+                                    <button class="btn btn-sm btn-primary mt-1" onclick="addComment(@Model.Question.Id, null)">
+                                        Add Comment
+                                    </button>
+                                </div>
+
+                                <button class="btn btn-link btn-sm p-0 mt-1" id="show-question-comment-btn"
+                                        onclick="showCommentForm('question')">
+                                    Add a comment
+                                </button>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+            <h4>@Model.Question.Answers.Count Answer(s)</h4>
+
+            @foreach (var answer in Model.Question.Answers)
+            {
+                <div class="card answer-card @(answer.IsAccepted ? "accepted-answer" : "") mb-3">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-1 text-center vote-buttons">
+                                <button class="btn btn-link" onclick="vote(null, @answer.Id, 1)">▲</button>
+                                <strong id="answer-@answer.Id-votes">@answer.VoteCount</strong>
+                                <button class="btn btn-link" onclick="vote(null, @answer.Id, -1)">▼</button>
+                                
+                                @if (answer.IsAccepted)
+                                {
+                                    <div class="text-success mt-2 fw-bold">✓</div>
+                                    
+                                    <!-- Unaccept button (hidden by default; JS shows for question owner) -->
+                                    <button class="btn btn-sm btn-outline-danger mt-1"
+                                            id="unacceptAnswerBtn-@answer.Id"
+                                            style="display:none;"
+                                            onclick="unacceptAnswer(@answer.Id)">
+                                        Unaccept
+                                    </button>
+                                }
+                                else
+                                {
+                                    <!-- ADDED: Accept button (hidden by default; JS will show only for question owner) -->
+                                    <button class="btn btn-sm btn-success mt-2"
+                                            id="acceptAnswerBtn-@answer.Id"
+                                            style="display:none;"
+                                            onclick="acceptAnswer(@answer.Id)">
+                                        ✓
+                                    </button>
+                                }
+                            </div>
+                            <div class="col-md-11">
+                                
+                                <!-- ADDED: Answer wrapper with owner id -->
+                                <div class="answer-wrapper"
+                                     id="answer-wrapper-@answer.Id"
+                                     data-answerid="@answer.Id"
+                                     data-userid="@answer.UserId">
+
+                                    <!-- ADDED: Edit button (hidden; JS shows only for owner) -->
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <p class="mb-0" id="answerBodyText-@answer.Id" style="white-space: pre-wrap;">@answer.Body</p>
+
+                                        <button class="btn btn-sm btn-warning fw-semibold shadow-sm ms-2"
+                                                id="editAnswerBtn-@answer.Id"
+                                                style="display:none;"
+                                                onclick="openEditAnswer(@answer.Id)">
+                                            ✎ Edit
+                                        </button>
+                                    </div>
+
+                                    <!-- ADDED: Edit box -->
+                                    <div id="editAnswerBox-@answer.Id" class="mt-2" style="display:none;">
+                                        <textarea class="form-control" id="editAnswerBody-@answer.Id" rows="5"
+                                          minlength="20" maxlength="5000">@answer.Body</textarea>
+
+                                        <div id="editAnswerError-@answer.Id" class="alert alert-danger d-none mt-2"></div>
+
+                                        <button class="btn btn-success" onclick="saveAnswerEdit(@answer.Id)">Save</button>
+                                        <button class="btn btn-secondary ms-2" onclick="cancelEditAnswer(@answer.Id)">Cancel</button>
+                                    </div>
+                                </div>
+
+
+
+
+
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        @if (answer.UpdatedAt.HasValue)
+                                        {
+                                            <small class="text-muted">Edited @answer.UpdatedAt.Value.ToString("MMM dd, yyyy")</small>
+                                        }
+                                    </div>
+                                    <div class="text-end">
+                                        <small class="text-muted">
+                                            Answered @answer.CreatedAt.ToString("MMM dd, yyyy") by <strong>@answer.User.Username</strong>
+                                        </small>
+                                    </div>
+                                </div>
+
+                                <div class="mt-3">
+                                    <h6>Comments</h6>
+                                    <div id="answer-@answer.Id-comments">
+                                      
+                                        @foreach (var comment in answer.Comments)
+                                        {
+                                            <div class="border-bottom py-2 comment-wrapper"
+                                                 data-commentid="@comment.Id"
+                                                 data-userid="@comment.UserId">
+
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <small id="commentText-@comment.Id">
+                                                        @comment.Body - <strong>@comment.User.Username</strong> (@comment.CreatedAt.ToString("MMM dd"))
+                                                    </small>
+
+                                                    <button class="btn btn-sm btn-warning fw-semibold shadow-sm ms-2"
+                                                            id="editCommentBtn-@comment.Id"
+                                                            style="display:none;"
+                                                            onclick="openEditComment(@comment.Id)">
+                                                        ✎ Edit
+                                                    </button>
+                                                </div>
+
+                                                <div id="editCommentBox-@comment.Id" class="mt-2" style="display:none;">
+                                                    <input type="text"
+                                                           class="form-control form-control-sm"
+                                                           id="editCommentBody-@comment.Id"
+                                                           value="@comment.Body"
+                                                           maxlength="500" />
+
+                                                    <div id="editCommentError-@comment.Id" class="alert alert-danger d-none mt-2"></div>
+
+                                                    <button class="btn btn-success btn-sm" onclick="saveCommentEdit(@comment.Id)">Save</button>
+                                                    <button class="btn btn-secondary btn-sm ms-2" onclick="cancelEditComment(@comment.Id)">Cancel</button>
+                                                </div>
+                                            </div>
+                                        }
+
+
+
+
+                                    </div>
+                                    <div class="mt-2" id="answer-@answer.Id-comment-form" style="display:none;">
+                                        <input type="text" class="form-control form-control-sm" id="answer-@answer.Id-comment-text" placeholder="Add a comment..." maxlength="500">
+                                        <button class="btn btn-sm btn-primary mt-1" onclick="addComment(null, @answer.Id)">Add Comment</button>
+                                    </div>
+                                    <button class="btn btn-link btn-sm p-0 mt-1" onclick="showCommentForm('answer', @answer.Id)">Add a comment</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <div class="card mt-4" id="answerForm" style="display:none;">
+                <div class="card-header">
+                    <h5 class="mb-0">Your Answer</h5>
+                </div>
+                <div class="card-body">
+                    <div id="answerError" class="alert alert-danger d-none"></div>
+                    <textarea class="form-control mb-3" id="answerBody" rows="8" placeholder="Write your answer here..." minlength="20" maxlength="5000"></textarea>
+                    <button class="btn btn-primary" onclick="submitAnswer()">Post Answer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@section Scripts {
+    <script>
+        if (getToken()) {
+            document.getElementById('answerForm').style.display = 'block';
+            document.getElementById('show-question-comment-btn').style.display = 'inline-block';
+        }
+
+        function showCommentForm(type, id) {
+            if (!getToken()) {
+                window.location.href = '/Login';
+                return;
+            }
+
+            if (type === 'question') {
+                document.getElementById('question-comment-form').style.display = 'block';
+                document.getElementById('show-question-comment-btn').style.display = 'none';
+            } else {
+                document.getElementById('answer-' + id + '-comment-form').style.display = 'block';
+            }
+        }
+
+        async function vote(questionId, answerId, voteType) {
+            if (!getToken()) {
+                window.location.href = '/Login';
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/vote', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + getToken()
+                    },
+                    body: JSON.stringify({
+                        questionId,
+                        answerId,
+                        type: voteType
+                    })
+                });
+
+                if (response.ok) {
+                    location.reload();
+                } else if (response.status === 401) {
+                    window.location.href = '/Login';
+                } else if (response.status === 403) {
+                    alert("You are not allowed to do this action.");
+                }
+            } catch (error) {
+                console.error('Error voting:', error);
+            }
+        }
+
+        async function submitAnswer() {
+            if (!getToken()) {
+                window.location.href = '/Login';
+                return;
+            }
+
+            const body = document.getElementById('answerBody').value;
+            const questionId = @(Model.Question?.Id ?? 0);
+
+            if (body.length < 20) {
+                document.getElementById('answerError').textContent = 'Answer must be at least 20 characters';
+                document.getElementById('answerError').classList.remove('d-none');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/answers', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + getToken()
+                    },
+                    body: JSON.stringify({ body, questionId })
+                });
+
+                if (response.ok) {
+                    location.reload();
+                } else if (response.status === 401) {
+                    window.location.href = '/Login';
+                } else if (response.status === 403) {
+                  document.getElementById('answerError').textContent = "You are not allowed to post.";
+                  document.getElementById('answerError').classList.remove('d-none');
+                }                
+                else {
+                    const data = await response.json();
+                    document.getElementById('answerError').textContent = data.message || 'Failed to post answer';
+                    document.getElementById('answerError').classList.remove('d-none');
+                }
+            } catch (error) {
+                document.getElementById('answerError').textContent = 'An error occurred. Please try again.';
+                document.getElementById('answerError').classList.remove('d-none');
+            }
+        }
+
+        async function addComment(questionId, answerId) {
+            if (!getToken()) {
+                window.location.href = '/Login';
+                return;
+            }
+
+            let body;
+            if (questionId) {
+                body = document.getElementById('question-comment-text').value;
+            } else {
+                body = document.getElementById('answer-' + answerId + '-comment-text').value;
+            }
+
+            if (body.length < 5) {
+                alert('Comment must be at least 5 characters');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/comments', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + getToken()
+                    },
+                    body: JSON.stringify({ body, questionId, answerId })
+                });
+
+                if (response.ok) {
+                    location.reload();
+                } else if (response.status === 401) {
+                    window.location.href = '/Login';
+                } else if (response.status === 403) {
+                  alert("You are not allowed to comment here.");
+                }
+            } catch (error) {
+                console.error('Error posting comment:', error);
+            }
+        }
+
+
+
+        // ---------------------------  added this part --------------------------
+        // ADDED: Decode JWT to get current userId (JWT-only)
+        function base64UrlDecode(str) {
+            str = str.replace(/-/g, '+').replace(/_/g, '/');
+            while (str.length % 4) str += '=';
+            return atob(str);
+        }
+
+        function getMyUserIdFromToken() {
+            const token = getToken();
+            if (!token) return null;
+
+            const payload = JSON.parse(base64UrlDecode(token.split('.')[1]));
+
+            // Your token uses ClaimTypes.NameIdentifier; usually becomes "nameid"
+            return payload.nameid
+                || payload["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"]
+                || payload.sub
+                || null;
+        }
+
+        // ADDED: Show Edit button only if current user == question owner
+        // document.addEventListener("DOMContentLoaded", () => {
+        //     (function showEditButtonForOwner() {
+        //         const wrapper = document.getElementById("question-wrapper");
+        //         if (!wrapper) return;
+
+        //         const ownerId = wrapper.getAttribute("data-userid");
+        //         const myId = getMyUserIdFromToken();
+
+        //         if (myId && ownerId && String(myId) === String(ownerId)) {
+        //             document.getElementById("editQuestionBtn").style.display = "inline-block";
+        //         }
+        //     })();
+        // });
+
+        // ADDED: Open/cancel edit UI
+        function openEditQuestion() {
+            document.getElementById("editQuestionBox").style.display = "block";
+        }
+
+        function cancelEditQuestion() {
+            document.getElementById("editQuestionBox").style.display = "none";
+            const err = document.getElementById("editQuestionError");
+            err.classList.add("d-none");
+            err.textContent = "";
+        }
+
+        // ADDED: Save edit (PUT /api/questions/{id}) + handle 401/403
+        async function saveQuestionEdit() {
+            if (!getToken()) {
+                window.location.href = "/Login";
+                return;
+            }
+
+            const wrapper = document.getElementById("question-wrapper");
+            const questionId = wrapper.getAttribute("data-questionid");
+
+            const title = document.getElementById("editQuestionTitle").value.trim();
+            const body = document.getElementById("editQuestionBody").value.trim();
+
+            // Keep existing tags so your service won't clear them
+            //const tags = JSON.parse(wrapper.getAttribute("data-tags") || "[]");
+
+            let tags = wrapper.getAttribute("data-tags") || "";
+            tags = tags.trim();
+
+            const errorBox = document.getElementById("editQuestionError");
+            errorBox.classList.add("d-none");
+            errorBox.textContent = "";
+
+            if (title.length < 5) {
+                errorBox.textContent = "Title must be at least 5 characters.";
+                errorBox.classList.remove("d-none");
+                return;
+            }
+
+            if (body.length < 20) {
+                errorBox.textContent = "Body must be at least 20 characters.";
+                errorBox.classList.remove("d-none");
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/questions/${questionId}`, {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer " + getToken()
+                    },
+                    body: JSON.stringify({ title, body, tags })
+                });
+
+                if (response.ok) {
+                    location.reload();
+                } else if (response.status === 401) {
+                    window.location.href = "/Login";
+                } else if (response.status === 403) {
+                    errorBox.textContent = "Only the author can edit this question.";
+                    errorBox.classList.remove("d-none");
+                } else {
+                    let msg = "Failed to update question.";
+                    try {
+                        const data = await response.json();
+                        msg = data.message || msg;
+                    } catch { }
+                    errorBox.textContent = msg;
+                    errorBox.classList.remove("d-none");
+                }
+            } catch (e) {
+                errorBox.textContent = "An error occurred. Please try again.";
+                errorBox.classList.remove("d-none");
+            }
+        }
+
+            
+
+        //---------- added for Owner Answer modify --------
+        function openEditAnswer(answerId) {
+          document.getElementById(`editAnswerBox-${answerId}`).style.display = "block";
+        }
+
+        function cancelEditAnswer(answerId) {
+          document.getElementById(`editAnswerBox-${answerId}`).style.display = "none";
+          const err = document.getElementById(`editAnswerError-${answerId}`);
+          err.classList.add("d-none");
+          err.textContent = "";
+        }
+
+        async function saveAnswerEdit(answerId) {
+          if (!getToken()) { window.location.href = "/Login"; return; }
+
+          const body = document.getElementById(`editAnswerBody-${answerId}`).value.trim();
+          const errorBox = document.getElementById(`editAnswerError-${answerId}`);
+          errorBox.classList.add("d-none");
+          errorBox.textContent = "";
+
+          if (body.length < 20) {
+            errorBox.textContent = "Answer must be at least 20 characters.";
+            errorBox.classList.remove("d-none");
+            return;
+          }
+
+          try {
+            const res = await fetch(`/api/answers/${answerId}`, {
+              method: "PUT",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + getToken()
+              },
+              body: JSON.stringify({ body })
+            });
+
+            if (res.ok) {
+              location.reload();
+            } else if (res.status === 401) {
+              window.location.href = "/Login";
+            } else if (res.status === 403) {
+              errorBox.textContent = "Only the author can edit this answer.";
+              errorBox.classList.remove("d-none");
+            } else {
+              let msg = "Failed to update answer.";
+              try { const data = await res.json(); msg = data.message || msg; } catch {}
+              errorBox.textContent = msg;
+              errorBox.classList.remove("d-none");
+            }
+          } catch (e) {
+            errorBox.textContent = "An error occurred. Please try again.";
+            errorBox.classList.remove("d-none");
+          }
+        }
+
+        // ADDED: show Edit button only for answer owner
+        // document.addEventListener("DOMContentLoaded", () => {
+        //   const myId = getMyUserIdFromToken();
+        //   if (!myId) return;
+
+        //   document.querySelectorAll(".answer-wrapper").forEach(w => {
+        //     const ownerId = w.getAttribute("data-userid");
+        //     const answerId = w.getAttribute("data-answerid");
+        //     if (String(myId) === String(ownerId)) {
+        //       const btn = document.getElementById(`editAnswerBtn-${answerId}`);
+        //       if (btn) btn.style.display = "inline-block";
+        //     }
+        //   });
+        // });
+
+
+        //---------------------------------------------
+
+
+        //--------------------------- added for Owner Comment modify --------
+        function openEditComment(commentId) {
+          document.getElementById(`editCommentBox-${commentId}`).style.display = "block";
+        }
+
+        function cancelEditComment(commentId) {
+          document.getElementById(`editCommentBox-${commentId}`).style.display = "none";
+          const err = document.getElementById(`editCommentError-${commentId}`);
+          err.classList.add("d-none");
+          err.textContent = "";
+        }
+
+        async function saveCommentEdit(commentId) {
+          if (!getToken()) { window.location.href = "/Login"; return; }
+
+          const body = document.getElementById(`editCommentBody-${commentId}`).value.trim();
+          const errorBox = document.getElementById(`editCommentError-${commentId}`);
+          errorBox.classList.add("d-none");
+          errorBox.textContent = "";
+
+          if (body.length < 5) {
+            errorBox.textContent = "Comment must be at least 5 characters.";
+            errorBox.classList.remove("d-none");
+            return;
+          }
+
+          const res = await fetch(`/api/comments/${commentId}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer " + getToken()
+            },
+            body: JSON.stringify({ body })
+          });
+
+          if (res.ok) location.reload();
+          else if (res.status === 401) window.location.href = "/Login";
+          else if (res.status === 403) {
+            errorBox.textContent = "Only the author can edit this comment.";
+            errorBox.classList.remove("d-none");
+          } else {
+            errorBox.textContent = "Failed to update comment.";
+            errorBox.classList.remove("d-none");
+          }
+        }
+
+        //  show edit button only for comment owner
+        // document.addEventListener("DOMContentLoaded", () => {
+        //   const myId = getMyUserIdFromToken();
+        //   if (!myId) return;
+
+        //   document.querySelectorAll(".comment-wrapper").forEach(w => {
+        //     const ownerId = w.getAttribute("data-userid");
+        //     const commentId = w.getAttribute("data-commentid");
+        //     if (String(myId) === String(ownerId)) {
+        //       const btn = document.getElementById(`editCommentBtn-${commentId}`);
+        //       if (btn) btn.style.display = "inline-block";
+        //     }
+        //   });
+        // });
+
+        //-------------------------------------------
+
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const myId = getMyUserIdFromToken();
+            if (!myId) return;
+
+            // Question edit button
+            const qWrapper = document.getElementById("question-wrapper");
+            if (qWrapper) {
+                const ownerId = qWrapper.getAttribute("data-userid");
+                if (ownerId && String(myId) === String(ownerId)) {
+                    const qBtn = document.getElementById("editQuestionBtn");
+                    if (qBtn) qBtn.style.display = "inline-block";
+                }
+            }
+
+            // Answer edit buttons
+            document.querySelectorAll(".answer-wrapper").forEach(w => {
+                const ownerId = w.getAttribute("data-userid");
+                const answerId = w.getAttribute("data-answerid");
+                if (ownerId && answerId && String(myId) === String(ownerId)) {
+                    const btn = document.getElementById(`editAnswerBtn-${answerId}`);
+                    if (btn) btn.style.display = "inline-block";
+                }
+            });
+
+            // Comment edit buttons
+            document.querySelectorAll(".comment-wrapper").forEach(w => {
+                const ownerId = w.getAttribute("data-userid");
+                const commentId = w.getAttribute("data-commentid");
+                if (ownerId && commentId && String(myId) === String(ownerId)) {
+                    const btn = document.getElementById(`editCommentBtn-${commentId}`);
+                    if (btn) btn.style.display = "inline-block";
+                }
+            });
+
+            //  Show Accept buttons only for question owner
+            const qWrapperAcpt = document.getElementById("question-wrapper");
+            if (qWrapperAcpt) {
+                const qOwnerId = qWrapperAcpt.getAttribute("data-userid");
+                if (qOwnerId && myId && String(myId) === String(qOwnerId)) {
+
+                    document.querySelectorAll("[id^='acceptAnswerBtn-']").forEach(btn => {
+                        btn.style.display = "inline-block";
+                    });
+
+                    document.querySelectorAll("[id^='unacceptAnswerBtn-']").forEach(btn => {
+                        btn.style.display = "inline-block";
+                    });
+                }
+            }
+
+
+        });
+
+
+        async function acceptAnswer(answerId) {
+            if (!getToken()) {
+                window.location.href = "/Login";
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/answers/${answerId}/accept`, {
+                    method: "POST",
+                    headers: {
+                        "Authorization": "Bearer " + getToken()
+                    }
+                });
+
+                if (res.ok) {
+                    location.reload();
+                } else if (res.status === 401) {
+                    window.location.href = "/Login";
+                } else if (res.status === 403) {
+                    alert("Only the question owner can accept an answer.");
+                } else {
+                    const data = await res.json().catch(() => null);
+                    alert(data?.message || "Failed to accept answer.");
+                }
+            } catch (e) {
+                alert("An error occurred. Please try again.");
+            }
+        }
+
+
+        async function unacceptAnswer(answerId) {
+            if (!getToken()) {
+                window.location.href = "/Login";
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/answers/${answerId}/unaccept`, {
+                    method: "POST",
+                    headers: {
+                        "Authorization": "Bearer " + getToken()
+                    }
+                });
+
+                if (res.ok) {
+                    location.reload();
+                } else if (res.status === 401) {
+                    window.location.href = "/Login";
+                } else if (res.status === 403) {
+                    alert("Only the question owner can unaccept an answer.");
+                } else {
+                    const data = await res.json().catch(() => null);
+                    alert(data?.message || "Failed to unaccept answer.");
+                }
+            } catch (e) {
+                alert("An error occurred. Please try again.");
+            }
+        }
+
+
+
+    </script>
+}
