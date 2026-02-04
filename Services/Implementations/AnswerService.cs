@@ -53,7 +53,11 @@ public class AnswerService : IAnswerService
     {
         try
         {
+            _logger.LogInformation("UpdateAnswer attempt. answerId={AnswerId}, requestUserId={UserId}", answerId, userId);
+            
             var answer = await _context.Answers.FindAsync(answerId);
+
+            _logger.LogInformation("Answer ownerId={OwnerId}", answer!.UserId);
 
             if (answer == null)
             {

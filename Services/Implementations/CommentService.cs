@@ -103,5 +103,23 @@ public class CommentService : ICommentService
         }
     }
 
+    public async Task<(bool Success, string Message)> DeleteCommentAsync(int commentId, int userId)
+    {
+        try
+        {
+            var c = await _context.Comments.FindAsync(commentId);
+            if (c == null) return (false, "Comment not found");
 
+            if (c.UserId != userId) return (false, "You do not have permission to delete this comment");
+
+            _context.Comments.Remove(c);
+            await _context.SaveChangesAsync();
+            return (true, "Comment deleted successfully");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting comment {CommentId}", commentId);
+            return (false, "An error occurred while deleting the comment");
+        }
+    }
 }

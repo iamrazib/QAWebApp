@@ -59,27 +59,6 @@ builder.Logging.AddDebug();
 
 var app = builder.Build();
 
-// Apply migrations and seed database
-//using (var scope = app.Services.CreateScope())
-//{
-//    var services = scope.ServiceProvider;
-//    var logger = services.GetRequiredService<ILogger<Program>>();
-
-//    try
-//    {
-//        var context = services.GetRequiredService<ApplicationDbContext>();
-
-//        logger.LogInformation("Applying database migrations...");
-//        context.Database.Migrate();
-//        logger.LogInformation("Database migrations applied successfully.");
-//    }
-//    catch (Exception ex)
-//    {
-//        logger.LogError(ex, "An error occurred while migrating the database.");
-//    }
-//}
-
-
 // Configure the HTTP request pipeline
 if (!app.Environment.IsDevelopment())
 {

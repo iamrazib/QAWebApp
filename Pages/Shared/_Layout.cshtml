@@ -34,9 +34,9 @@
                         </li>
                     </ul>
                     <ul class="navbar-nav" id="authNav">
-                        <li class="nav-item d-none" id="askQuestionNav">
+                        @* <li class="nav-item d-none" id="askQuestionNav">
                             <a class="nav-link btn btn-primary text-white me-2" href="/Questions/Ask">Ask Question</a>
-                        </li>
+                        </li> *@
                         <li class="nav-item" id="loginNav">
                             <a class="nav-link" href="/Login">Login</a>
                         </li>
@@ -81,6 +81,7 @@
         function removeToken() {
             localStorage.removeItem('jwtToken');
             localStorage.removeItem('username');
+            sessionStorage.removeItem('jwtToken');
             updateAuthUI();
         }
 
@@ -98,14 +99,14 @@
                 document.getElementById('registerNav').classList.add('d-none');
                 document.getElementById('userNav').classList.remove('d-none');
                 document.getElementById('logoutNav').classList.remove('d-none');
-                document.getElementById('askQuestionNav').classList.remove('d-none');
+                // document.getElementById('askQuestionNav').classList.remove('d-none');
                 document.getElementById('usernameDisplay').textContent = username || 'User';
             } else {
                 document.getElementById('loginNav').classList.remove('d-none');
                 document.getElementById('registerNav').classList.remove('d-none');
                 document.getElementById('userNav').classList.add('d-none');
                 document.getElementById('logoutNav').classList.add('d-none');
-                document.getElementById('askQuestionNav').classList.add('d-none');
+                // document.getElementById('askQuestionNav').classList.add('d-none');
             }
         }
 
